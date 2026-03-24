@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>Maddy Tool Offline</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{--shadow:0 10px 30px rgba(0,0,0,.15)}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:980px;margin:24px auto;padding:0 16px;line-height:1.45}
+    h1{font-size:1.6rem;margin:0 0 12px}
+    .card{border:1px solid #ddd;border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 1px 2px rgba(0,0,0,.04);background:#fff}
+    label{display:block;font-weight:600;margin:8px 0 6px}
+    input[type="text"], textarea, select{width:100%;padding:12px;border:1px solid #ccc;border-radius:10px}
+    textarea{min-height:100px}
+    .row{display:flex;gap:16px;flex-wrap:wrap}
+    .col{flex:1;min-width:280px}
+    .btn{padding:10px 14px;border-radius:10px;border:1px solid #ccc;background:#fafafa;cursor:pointer}
+    .btn.primary{background:#eef;border-color:#ccd}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .muted{color:#666;font-size:.92rem}
+    .preview{white-space:normal}
+    .badge{display:inline-block;background:#eef;padding:2px 8px;border-radius:999px;margin-left:6px;font-size:.85rem}
+    .warn{color:#a00}
+    .help{background:#fff9e6;border:1px solid #f0d98a;border-radius:10px;padding:10px}
+    /* Modal */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:12px}
+    .modal{background:#fff;border-radius:16px;max-width:1000px;width:100%;max-height:86vh;display:flex;flex-direction:column;box-shadow:var(--shadow)}
+    .modal-header{display:flex;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid #eee}
+    .modal-body{padding:12px 16px;overflow:auto}
+    .modal-footer{padding:12px 16px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;vertical-align:top}
+    .count{font-weight:600}
+    .mode{display:flex;gap:12px;align-items:center}
+    .mode label{font-weight:500;margin:0}
+    .hidden{display:none}
+    ul,ol{padding-left:1.25rem;margin:0.25rem 0}
+    .desc-block{margin-bottom:1rem}
+    .inline{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+    .inline > * {flex: 1 1 auto}
+    .label{font-weight:600; font-size:.9rem}
+  </style>
+</head>
+<body>
+  <h1>Maddy Tool Offline <span class="badge">v2.2</span></h1>
+  <div class="card">
+    <p class="muted">Carica un <strong>CSV</strong> con due colonne: <em>Codice;Descrizione</em> (accetta anche la virgola). Celle multilinea, elenchi e <em>caratteri accentati</em> sono supportati. Se le accentate risultano rotte, cambia codifica qui sotto.</p>
+    <div class="inline">
+      <input type="file" id="file" accept=".csv">
+      <div>
+        <div class="label">Codifica del file</div>
+        <select id="encoding">
+          <option value="auto" selected>Rilevamento automatico</option>
+          <option value="utf-8">UTF-8</option>
+          <option value="windows-1252">Windows-1252 (Excel/Windows)</option>
+          <option value="iso-8859-1">ISO-8859-1</option>
+        </select>
+      </div>
+    </div>
+    <div id="loadStatus" class="muted"></div>
+  </div>
+
+  <div class="row">
+    <div class="card col">
+      <label for="cliente">Cliente</label>
+      <input type="text" id="cliente" placeholder="Nome cliente">
+      <div class="mode" style="margin-top:8px">
+        <span class="muted">Formato descrizioni:</span>
+        <label><input type="radio" name="fmt" value="md" checked> Markdown (semplice)</label>
+        <label><input type="radio" name="fmt" value="html"> HTML (mantieni formattazione)</label>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <button class="btn primary" id="openSearch" disabled>Cerca codici…</button>
+        <span class="muted">Selezionati: <span id="count" class="count">0</span> / 50</span>
+      </div>
+      <label for="codes" style="margin-top:14px">Codici selezionati (separati da ';')</label>
+      <input type="text" id="codes" placeholder="Es. ABC;DEF;..." />
+      <div class="muted" style="margin:6px 0">Puoi anche scriverli a mano (maiuscole/minuscole indifferenti).</div>
+      <label for="notes">Note (facoltative)</label>
+      <textarea id="notes" placeholder="Eventuali note da inserire a fine documento..."></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="preview">Anteprima</button>
+        <button class="btn" id="download">Scarica .doc (Word)</button>
+        <button class="btn" id="downloadTxt">Scarica .txt</button>
+        <button class="btn" id="downloadPdf">Scarica PDF</button>
+        <button class="btn hidden" id="openSameTab">Apri in questa scheda</button>
+      </div>
+      <div id="msg" class="muted" style="margin-top:8px"></div>
+      <div id="iosHelp" class="help hidden" style="margin-top:8px">
+        <strong>iPad:</strong> Se il salvataggio non parte:
+        <ol>
+          <li>Prova <em>Apri in questa scheda</em>.</li>
+          <li>Oppure tieni premuto su questo link e scegli “Scarica collegamento”: <a id="iosLink" href="#" download>scarica documento</a></li>
+          <li>In alternativa, quando il documento si apre, usa <em>Condividi → Salva su File</em>.</li>
+        </ol>
+      </div>
+      <div class="muted" style="margin-top:8px">
+        <strong>Suggerimento HTML:</strong> tag consentiti: <code>b/strong</code>, <code>i/em</code>, <code>u</code>, <code>span style="font-family, font-size, font-weight, font-style, text-decoration, color"</code>, <code>br</code>, <code>ul</code>, <code>ol</code>, <code>li</code>.
+      </div>
+    </div>
+    <div class="card col">
+      <strong>Anteprima Descrizioni</strong>
+      <div id="previewBox" class="preview muted" style="margin-top:8px">Carica il CSV, clicca “Cerca codici…”, seleziona e conferma per vedere l’anteprima. Le note sono separate da una riga.</div>
+    </div>
+  </div>
+
+  <!-- OVERLAY SEARCH MODAL -->
+  <div class="overlay" id="overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="searchTitle">
+      <div class="modal-header">
+        <strong id="searchTitle">Cerca codici per descrizione</strong>
+        <input type="text" id="search" placeholder="Digita almeno 2 caratteri…" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:10px">
+        <span class="muted">Selezionati: <span id="selCount">0</span> / 50</span>
+      </div>
+      <div class="modal-body">
+        <div class="muted" id="hint">Digita nella barra di ricerca. Nessun elenco viene mostrato finché non cerchi.</div>
+        <table id="tbl" style="display:none">
+          <thead><tr><th>Sel</th><th>Codice</th><th>Descrizione</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="cancel">Annulla</button>
+        <button class="btn primary" id="confirm">Conferma selezione</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+let rows = []; // [{code,desc}]
+let selected = new Set(); // stores normalized codes (UPPERCASE)
+let delimiter = ";";
+let origByNorm = new Map(); // NORMALIZED -> original code as in CSV
+let descByNorm = new Map(); // NORMALIZED -> description
+let lastDataUrl = ""; // for iOS fallback link
+
+function normCode(c){ return (c || "").trim().toUpperCase(); }
+
+function toNFC(s){ try { return (s||"").normalize('NFC'); } catch(e){ return s||""; } }
+function stripDiacritics(s){ try { return (s||"").normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch(e){ return s||""; } }
+function normSearchText(s){ return stripDiacritics(toNFC(s)).toLowerCase(); }
+
+function fixSmartQuotes(s){
+  // Converti alcune combinazioni "mojibake" e smart quotes in apostrofi/virgolette standard
+  return (s||"")
+    .replace(/\u2019/g, "'") // right single quote
+    .replace(/\u2018/g, "'") // left single quote
+    .replace(/\u201C/g, '"') // left double
+    .replace(/\u201D/g, '"') // right double
+    .replace(/\u2039/g, "'").replace(/\u203A/g, "'") // single guillemets
+    .replace(/\u00B4/g, "'"); // acute accent used as apostrophe
+}
+
+function detectDelimiter(sampleText){
+  const sample = sampleText.slice(0, 4096);
+  const semi = (sample.match(/;/g) || []).length;
+  const comma = (sample.match(/,/g) || []).length;
+  return (comma > semi) ? "," : ";";
+}
+
+// RFC4180-ish parser with multiline support
+function parseCSVRecords(text, sep){
+  const recs = [];
+  let cur = [];
+  let cell = "";
+  let inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const ch = text[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(i+1 < text.length && text[i+1] === '"'){ cell += '"'; i++; }
+        else{ inQuotes = false; }
+      }else{
+        cell += ch;
+      }
+    }else{
+      if(ch === '"'){
+        inQuotes = true;
+      }else if(ch === sep){
+        cur.push(cell); cell = "";
+      }else if(ch === '\r'){
+        // ignore, handle on \n
+      }else if(ch === '\n'){
+        cur.push(cell); cell = "";
+        recs.push(cur); cur = [];
+      }else{
+        cell += ch;
+      }
+    }
+  }
+  cur.push(cell);
+  if(cur.length > 1 || cur[0] !== "") recs.push(cur);
+  return recs;
+}
+
+function parseCSV(text){
+  text = toNFC(fixSmartQuotes(text));
+  delimiter = detectDelimiter(text);
+  const records = parseCSVRecords(text, delimiter);
+  const out = [];
+  origByNorm = new Map();
+  descByNorm = new Map();
+  for(let i=0;i<records.length;i++){
+    const cells = records[i];
+    if(!cells || cells.length === 0) continue;
+    const code = toNFC((cells[0] || "").trim());
+    const desc = toNFC((cells.slice(1).join(delimiter)).trim());
+    if(!code && !desc) continue;
+    const low = (code + " " + desc).toLowerCase();
+    if(i === 0 && (low.includes("codice") && low.includes("descr"))) continue; // header
+    const n = normCode(code);
+    if(!origByNorm.has(n)) origByNorm.set(n, code);
+    if(!descByNorm.has(n)) descByNorm.set(n, desc);
+    out.push({code, desc});
+  }
+  return out;
+}
+
+function openSearch(){
+  document.getElementById("overlay").style.display = "flex";
+  document.getElementById("search").value = "";
+  document.getElementById("tbl").style.display = "none";
+  document.getElementById("hint").style.display = "block";
+  renderSearch("");
+  document.getElementById("selCount").textContent = selected.size;
+  setTimeout(()=>document.getElementById("search").focus(), 50);
+}
+
+function closeSearch(){
+  document.getElementById("overlay").style.display = "none";
+}
+
+function renderSearch(filter){
+  const tbody = document.querySelector("#tbl tbody");
+  tbody.innerHTML = "";
+  const table = document.getElementById("tbl");
+  const hint = document.getElementById("hint");
+  if(!filter || filter.length < 2){
+    table.style.display = "none";
+    hint.style.display = "block";
+    return;
+  }
+  const f = normSearchText(filter);
+  let shown = 0;
+  for(const r of rows){
+    const hay = normSearchText(getPlainText(r.desc));
+    if(!hay.includes(f)) continue;
+    shown++;
+    const tr = document.createElement("tr");
+    const tdSel = document.createElement("td");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = selected.has(normCode(r.code));
+    cb.addEventListener("change", () => toggleSelection(r.code, cb.checked, true));
+    tdSel.appendChild(cb);
+    const tdC = document.createElement("td"); tdC.textContent = r.code;
+    const tdD = document.createElement("td"); tdD.innerHTML = formatDescForTable(r.desc);
+    tr.appendChild(tdSel); tr.appendChild(tdC); tr.appendChild(tdD);
+    tr.addEventListener("dblclick", () => toggleSelection(r.code, !selected.has(normCode(r.code)), true));
+    tbody.appendChild(tr);
+  }
+  table.style.display = shown ? "table" : "none";
+  hint.style.display = shown ? "none" : "block";
+}
+
+function toggleSelection(codeRaw, makeSelected, inModal=false){
+  const n = normCode(codeRaw);
+  if(makeSelected){
+    if(selected.size >= 50 && !selected.has(n)){ alert("Massimo 50 codici."); return; }
+    selected.add(n);
+  }else{
+    selected.delete(n);
+  }
+  if(inModal){
+    document.getElementById("selCount").textContent = selected.size;
+  }
+  syncCodesField();
+  updateCount();
+  renderSearch(document.getElementById("search").value);
+}
+
+function syncCodesField(){
+  const list = Array.from(selected).map(n => origByNorm.get(n) || n);
+  document.getElementById("codes").value = list.join(";");
+}
+
+function updateFromCodesField(){
+  const val = document.getElementById("codes").value || "";
+  const parts = val.split(";").map(s => toNFC(s.trim())).filter(Boolean).slice(0,50);
+  selected = new Set(parts.map(normCode));
+  updateCount();
+}
+
+function updateCount(){
+  document.getElementById("count").textContent = selected.size;
+}
+
+function currentFormatMode(){
+  const r = document.querySelector('input[name="fmt"]:checked');
+  return r ? r.value : "md";
+}
+
+function buildPreview(){
+  const msg = document.getElementById("msg");
+  msg.textContent = "";
+  if(rows.length === 0){
+    msg.innerHTML = '<span class="warn">Nessun CSV caricato.</span>';
+    return;
+  }
+  let codes = Array.from(selected);
+  if(codes.length === 0){
+    const manual = (document.getElementById("codes").value || "").split(";").map(s=>toNFC(s.trim())).filter(Boolean);
+    codes = manual.slice(0,50).map(normCode);
+  }
+  if(codes.length === 0){
+    msg.innerHTML = '<span class="warn">Nessun codice selezionato o scritto.</span>';
+    return;
+  }
+  const parts = [];
+  const mode = currentFormatMode();
+  for(const n of codes){
+    const raw = descByNorm.has(n) ? descByNorm.get(n) : `[MANCANTE] Codice ${origByNorm.get(n) || n}`;
+    parts.push(`<div class="desc-block">${renderDesc(raw, mode)}<br></div>`);
+  }
+  const box = document.getElementById("previewBox");
+  box.classList.remove("muted");
+  const notes = document.getElementById("notes").value.trim();
+  if(parts.length){
+    if(notes){
+      const notesHtml = (mode === "html") ? sanitizeHTML(notes) : markdownToHTML(notes);
+      box.innerHTML = parts.join("") + "<hr>" + `<p><strong>Note:</strong> ${notesHtml}</p>`;
+    } else {
+      box.innerHTML = parts.join("");
+    }
+  } else {
+    box.innerHTML = "";
+  }
+}
+
+function renderDesc(raw, mode){
+  if(mode === "html"){
+    return sanitizeHTML(raw);
+  }else{
+    return markdownToHTML(raw);
+  }
+}
+
+function formatDescForTable(raw){
+  const html = renderDesc(raw, currentFormatMode());
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  const text = div.textContent || div.innerText || "";
+  return escapeHtml(text.length > 240 ? text.slice(0,240) + "…" : text);
+}
+
+function markdownToHTML(s){
+  // Escape base
+  let esc = (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  // Liste: linee che iniziano con -, *, • o "1. "
+  const lines = esc.split(/\r?\n/);
+  let out = "";
+  let listBuf = [];
+  let listType = null;
+  function flushList(){
+    if(!listBuf.length) return;
+    const tag = (listType === "ol") ? "ol" : "ul";
+    out += "<"+tag+">" + listBuf.map(item => "<li>"+item+"</li>").join("") + "</"+tag+">";
+    listBuf = []; listType = null;
+  }
+  for(const rawLine of lines){
+    const line = rawLine;
+    const mUl = line.match(/^\s*(?:[-*•]\s+)(.+)$/);
+    const mOl = line.match(/^\s*(?:\d+)\.\s+(.+)$/);
+    if(mUl){
+      const item = mUl[1];
+      if(listType && listType !== "ul") flushList();
+      listType = "ul";
+      listBuf.push(item);
+      continue;
+    }
+    if(mOl){
+      const item = mOl[1];
+      if(listType && listType !== "ol") flushList();
+      listType = "ol";
+      listBuf.push(item);
+      continue;
+    }
+    // linea normale
+    flushList();
+    let inline = line;
+    inline = inline.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    inline = inline.replace(/\*(.+?)\*/g, "<em>$1</em>");
+    inline = inline.replace(/__(.+?)__/g, "<u>$1</u>");
+    out += (inline === "" ? "<br>" : inline + "<br>");
+  }
+  flushList();
+  out = out.replace(/<\/ul><br>/g,"</ul>").replace(/<\/ol><br>/g,"</ol>");
+  return out;
+}
+
+function sanitizeHTML(s){
+  s = fixSmartQuotes(s||"");
+  // Rimuovi script/style e on* attributes
+  s = s.replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "");
+  s = s.replace(/\s+on\w+\s*=\s*(['"]).*?\1/gi, "");
+  // Consenti solo i seguenti tag
+  s = s.replace(/<(?!\/?(b|strong|i|em|u|br|span|ul|ol|li)(\s|>|\/))/gi, "&lt;");
+  // Whitelist style su <span>
+  s = s.replace(/<span([^>]*)>/gi, (m, attrs) => {
+    let style = "";
+    const styleMatch = attrs.match(/\sstyle\s*=\s*(['"])(.*?)\1/i);
+    if(styleMatch){
+      style = filterStyle(styleMatch[2]);
+    }
+    return `<span${style ? ` style="${style}"` : ""}>`;
+  });
+  return s;
+}
+
+function getPlainText(html){
+  const div = document.createElement("div");
+  div.innerHTML = sanitizeHTML(html);
+  return (div.textContent || div.innerText || "").trim();
+}
+
+function filterStyle(styleStr){
+  const allowed = ["font-family","font-weight","font-style","text-decoration","color","font-size"];
+  const out = [];
+  for(const chunk of styleStr.split(";")){
+    const kv = chunk.split(":");
+    if(kv.length < 2) continue;
+    const k = kv[0].trim().toLowerCase();
+    const v = kv.slice(1).join(":").trim();
+    if(allowed.includes(k)){
+      out.push(`${k}: ${v}`);
+    }
+  }
+  return out.join("; ");
+}
+
+function startDownload(html){
+  const cliente = (document.getElementById("cliente").value || "").trim();
+  const fname = sanitizeFilename(cliente ? cliente : "Documento_Maddy") + ".doc";
+  const blob = new Blob([html], {type: "application/msword"});
+
+  const reader = new FileReader();
+  reader.onloadend = function(){
+    lastDataUrl = reader.result;
+    const iosLink = document.getElementById("iosLink");
+    iosLink.href = lastDataUrl;
+    iosLink.setAttribute("download", fname);
+    document.getElementById("iosHelp").classList.remove("hidden");
+
+    if(isIOS()){
+      const w = window.open(lastDataUrl, "_blank");
+      if(!w){
+        document.getElementById("openSameTab").classList.remove("hidden");
+        document.getElementById("msg").innerHTML = '<span class="warn">Popup bloccato da Safari. Usa “Apri in questa scheda” o tieni premuto il link di download qui sotto.</span>';
+      }
+    } else {
+      const a = document.createElement("a");
+      a.href = lastDataUrl;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(()=>{ a.remove(); }, 0);
+    }
+  };
+  reader.readAsDataURL(blob);
+}
+
+function downloadDoc(){
+  const mode = currentFormatMode();
+  const {parts} = buildDocumentParts(mode);
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body>${parts.join("\n")}</body></html>`;
+  startDownload(html);
+}
+
+function isIOS(){
+  const ua = navigator.userAgent || navigator.vendor || window.opera || "";
+  return /iPad|iPhone|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function sanitizeFilename(name){
+  name = name.replace(/[\\\/:*?"<>|]+/g, " ").trim();
+  if(!name) name = "Documento_Maddy";
+  if(name.length > 80) name = name.slice(0,80).trim();
+  return name;
+}
+
+function escapeHtml(s){
+  return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function getSelectedCodes(){
+  let codes = Array.from(selected);
+  if(codes.length === 0){
+    codes = (document.getElementById("codes").value || "")
+      .split(";")
+      .map(s=>toNFC(s.trim()))
+      .filter(Boolean)
+      .slice(0,50)
+      .map(normCode);
+  }
+  return codes;
+}
+
+function buildDocumentParts(mode){
+  const cliente = (document.getElementById("cliente").value || "").trim();
+  const codes = getSelectedCodes();
+  const parts = [];
+  parts.push(`<h2>Cliente: ${escapeHtml(cliente)}</h2>`);
+  for(const n of codes){
+    const raw = descByNorm.has(n) ? descByNorm.get(n) : `[MANCANTE] Codice ${origByNorm.get(n) || n}`;
+    parts.push(`<div class="desc-block">${renderDesc(raw, mode)}<br></div>`);
+  }
+  const notes = document.getElementById("notes").value.trim();
+  if(notes){
+    const notesHtml = (mode === "html") ? sanitizeHTML(notes) : markdownToHTML(notes);
+    parts.push(`<hr><p><strong>Note:</strong> ${notesHtml}</p>`);
+  }
+  return {cliente, codes, parts};
+}
+
+function downloadTxt(){
+  if(rows.length === 0){
+    document.getElementById("msg").innerHTML = '<span class="warn">Nessun CSV caricato.</span>';
+    return;
+  }
+  const {cliente, codes} = buildDocumentParts(currentFormatMode());
+  if(codes.length === 0){
+    document.getElementById("msg").innerHTML = '<span class="warn">Nessun codice selezionato o scritto.</span>';
+    return;
+  }
+  let content = `Cliente: ${cliente}\n\n`;
+  for(const n of codes){
+    const raw = descByNorm.has(n) ? descByNorm.get(n) : `[MANCANTE] Codice ${origByNorm.get(n) || n}`;
+    content += getPlainText(raw) + "\n\n";
+  }
+  const notes = document.getElementById("notes").value.trim();
+  if(notes){
+    content += "Note:\n" + notes + "\n";
+  }
+
+  const blob = new Blob([content], {type: "text/plain;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = sanitizeFilename(cliente ? cliente : "Documento_Maddy") + ".txt";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 0);
+}
+
+function downloadPDF(){
+  if(rows.length === 0){
+    document.getElementById("msg").innerHTML = '<span class="warn">Nessun CSV caricato.</span>';
+    return;
+  }
+  const mode = currentFormatMode();
+  const {cliente, codes, parts} = buildDocumentParts(mode);
+  if(codes.length === 0){
+    document.getElementById("msg").innerHTML = '<span class="warn">Nessun codice selezionato o scritto.</span>';
+    return;
+  }
+
+  const title = sanitizeFilename(cliente ? cliente : "Documento_Maddy");
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body{font-family:Arial,sans-serif;line-height:1.45;margin:24px}
+    h2{margin-top:0}
+    .desc-block{margin-bottom:1rem}
+    ul,ol{padding-left:1.25rem}
+    hr{margin:20px 0}
+    @media print{
+      body{margin:18mm}
+      button{display:none}
+    }
+  </style>
+</head>
+<body>
+  ${parts.join("\n")}
+  <script>
+    window.onload = function(){
+      setTimeout(function(){
+        window.print();
+      }, 150);
+    };
+  <\/script>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank");
+  if(!win){
+    document.getElementById("msg").innerHTML = '<span class="warn">Popup bloccato dal browser. Consenti i popup per usare il PDF.</span>';
+    return;
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+
+// ==== FILE LOADING with ENCODING DETECTION ====
+async function loadFileWithEncoding(file, encMode){
+  const buf = await file.arrayBuffer();
+  if(encMode !== "auto"){
+    return decodeWithCharset(buf, encMode);
+  }
+  // try multiple decoders and choose the one with fewer � (U+FFFD)
+  const candidates = ["utf-8", "windows-1252", "iso-8859-1"];
+  let best = null;
+  let bestScore = Infinity;
+  for(const enc of candidates){
+    const txt = decodeWithCharset(buf, enc);
+    const score = (txt.match(/\uFFFD/g) || []).length;
+    if(score < bestScore){
+      bestScore = score; best = txt;
+    }
+    if(score === 0) break;
+  }
+  return best;
+}
+
+function decodeWithCharset(buf, enc){
+  try{
+    const dec = new TextDecoder(enc, {fatal:false});
+    return dec.decode(buf);
+  }catch(e){
+    // fallback utf-8
+    const dec = new TextDecoder("utf-8");
+    return dec.decode(buf);
+  }
+}
+
+// Eventi globali
+document.getElementById("file").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if(!f) return;
+  const enc = document.getElementById("encoding").value;
+  try{
+    const text = await loadFileWithEncoding(f, enc);
+    rows = parseCSV(text);
+    selected.clear();
+    updateCount();
+    document.getElementById("openSearch").disabled = rows.length === 0;
+    document.getElementById("loadStatus").textContent = rows.length ? `Prodotti caricati: ${rows.length} (delimitatore: “${delimiter}”, codifica: ${enc.toUpperCase()})` : "";
+  }catch(err){
+    document.getElementById("loadStatus").innerHTML = '<span class="warn">Errore nella lettura del CSV.</span>';
+  }
+});
+
+document.getElementById("encoding").addEventListener("change", () => {
+  // Se un file è già caricato, ripeti l'import con la nuova codifica
+  const f = document.getElementById("file").files[0];
+  if(f){
+    const event = new Event('change');
+    document.getElementById("file").dispatchEvent(event);
+  }
+});
+
+document.getElementById("openSearch").addEventListener("click", openSearch);
+document.getElementById("cancel").addEventListener("click", closeSearch);
+document.getElementById("confirm").addEventListener("click", () => {
+  closeSearch();
+  buildPreview();
+});
+document.getElementById("search").addEventListener("input", (e) => {
+  renderSearch(e.target.value);
+});
+document.getElementById("codes").addEventListener("input", () => {
+  updateFromCodesField();
+});
+document.getElementById("preview").addEventListener("click", buildPreview);
+document.getElementById("download").addEventListener("click", downloadDoc);
+document.getElementById("downloadTxt").addEventListener("click", downloadTxt);
+document.getElementById("downloadPdf").addEventListener("click", downloadPDF);
+document.getElementById("openSameTab").addEventListener("click", () => {
+  if(lastDataUrl){ window.location.href = lastDataUrl; }
+});
+document.getElementById("overlay").addEventListener("click", (e) => {
+  if(e.target.id === "overlay") closeSearch();
+});
+document.addEventListener("keydown", (e) => {
+  if(e.key === "Escape") closeSearch();
+});
+</script>
+</body>
+</html>
